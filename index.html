@@ -266,6 +266,19 @@
   .col-nome { color: var(--text); max-width: 320px; }
   .col-valor { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--accent); text-align: right; white-space: nowrap; }
 
+  .col-pdf { text-align: center; white-space: nowrap; }
+  .btn-pdf {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+  }
+  .btn-pdf:hover { border-color: var(--accent-soft-2); color: var(--accent); }
+  .no-pdf { color: var(--text-faint); font-size: 12px; }
+
   tfoot td {
     padding: 14px 16px;
     background: var(--surface-alt);
@@ -363,6 +376,7 @@
             <th data-sort="cnpj">CNPJ emitente</th>
             <th data-sort="nome">Nome do emitente</th>
             <th data-sort="valor">Valor</th>
+            <th>PDF</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -370,6 +384,7 @@
           <tr>
             <td colspan="6">Exibindo <span id="foldCount">0</span> lançamento(s)</td>
             <td class="total-valor" id="foldValor">R$ 0,00</td>
+            <td></td>
           </tr>
         </tfoot>
       </table>
@@ -494,12 +509,22 @@
   }
 
   async function handleFiles(fileList) {
-    const files = Array.from(fileList).filter(f => f.name.toLowerCase().endsWith('.xml'));
+    const allFiles = Array.from(fileList);
+    const xmlFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.xml'));
+    const pdfFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+
+    // indexa os PDFs pelo nome do arquivo sem extensão (normalmente a própria chave de acesso)
+    const pdfIndex = {};
+    pdfFiles.forEach(f => {
+      const base = f.name.replace(/\.pdf$/i, '');
+      pdfIndex[base] = f;
+    });
+
     state.notas = [];
     state.ignorados = 0;
 
     let folio = 1;
-    for (const file of files) {
+    for (const file of xmlFiles) {
       try {
         const text = await file.text();
         const parsed = parseNFe(file.name, text);
@@ -507,7 +532,9 @@
           state.ignorados++;
           continue;
         }
-        state.notas.push({ folio: folio++, ...parsed });
+        const baseXml = file.name.replace(/\.xml$/i, '');
+        const pdfFile = pdfIndex[baseXml] || (parsed.chave ? pdfIndex[parsed.chave] : null) || null;
+        state.notas.push({ folio: folio++, ...parsed, pdfFile });
       } catch (e) {
         state.ignorados++;
       }
@@ -622,6 +649,7 @@
         <td class="col-cnpj">${cnpjMask(n.cnpj)}</td>
         <td class="col-nome">${escapeHtml(n.nome)}</td>
         <td class="col-valor">${n.valor ? currencyFmt.format(n.valor) : '—'}</td>
+        <td class="col-pdf">${n.pdfFile ? `<button class="btn-pdf" data-folio="${n.folio}">Abrir PDF</button>` : '<span class="no-pdf">—</span>'}</td>
       </tr>
     `).join('');
 
@@ -706,14 +734,28 @@
   });
 
   el.tableBody.addEventListener('click', (e) => {
-    const cell = e.target.closest('.col-chave');
-    if (!cell) return;
-    const chave = cell.dataset.chave;
-    if (!chave) return;
-    navigator.clipboard.writeText(chave).then(() => {
-      cell.classList.add('just-copied');
-      setTimeout(() => cell.classList.remove('just-copied'), 1200);
-    });
+    const chaveCell = e.target.closest('.col-chave');
+    if (chaveCell) {
+      const chave = chaveCell.dataset.chave;
+      if (chave) {
+        navigator.clipboard.writeText(chave).then(() => {
+          chaveCell.classList.add('just-copied');
+          setTimeout(() => chaveCell.classList.remove('just-copied'), 1200);
+        });
+      }
+      return;
+    }
+
+    const pdfBtn = e.target.closest('.btn-pdf');
+    if (pdfBtn) {
+      const folio = parseInt(pdfBtn.dataset.folio, 10);
+      const nota = state.notas.find(n => n.folio === folio);
+      if (nota && nota.pdfFile) {
+        const url = URL.createObjectURL(nota.pdfFile);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    }
   });
 
   render();
