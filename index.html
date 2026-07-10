@@ -346,7 +346,7 @@
   <div class="controls" id="controlsRow" style="display:none;">
     <div class="search-box">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="searchInput" placeholder="Buscar por chave, número, CNPJ ou emitente…">
+      <input type="text" id="searchInput" placeholder="Buscar por chave, número, CNPJ, emitente ou valor…">
     </div>
     <select id="sortSelect">
       <option value="folio-asc">Ordem de leitura</option>
@@ -606,12 +606,16 @@
     let rows = state.notas;
 
     if (q) {
-      rows = rows.filter(n =>
-        n.chave.toLowerCase().includes(q) ||
-        n.cNF.toLowerCase().includes(q) ||
-        n.cnpj.toLowerCase().includes(q) ||
-        n.nome.toLowerCase().includes(q)
-      );
+      const qValor = q.replace(/[^\d,.]/g, '').replace(/\./g, '').replace(',', '.');
+      rows = rows.filter(n => {
+        const valorStr = (n.valor || 0).toFixed(2).replace('.', ',');
+        return n.chave.toLowerCase().includes(q) ||
+          n.cNF.toLowerCase().includes(q) ||
+          n.cnpj.toLowerCase().includes(q) ||
+          n.nome.toLowerCase().includes(q) ||
+          valorStr.includes(q) ||
+          (qValor && valorStr.replace(',', '.').includes(qValor));
+      });
     }
 
     const dir = state.sortDir === 'asc' ? 1 : -1;
