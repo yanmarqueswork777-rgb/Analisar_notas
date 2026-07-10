@@ -318,6 +318,7 @@
     <div class="header-actions">
       <input type="file" id="folderInput" webkitdirectory directory multiple>
       <button class="btn-ghost" id="clearBtn" style="display:none;">Limpar</button>
+      <button class="btn-ghost" id="clearCacheBtn">Limpar cache</button>
       <button class="btn-ghost" id="exportBtn" style="display:none;">Exportar CSV</button>
       <button class="btn-primary" id="chooseBtn">Selecionar pasta</button>
     </div>
@@ -393,6 +394,7 @@
 
   <p class="foot-note">
     <span id="skippedNote"></span>
+    <span id="cacheNote"></span>
     <span>Livro Fiscal · leitor local de NF-e</span>
   </p>
 
@@ -407,12 +409,17 @@
     ignorados: 0,
     sortKey: 'folio',
     sortDir: 'asc',
-    query: ''
+    query: '',
+    cacheHits: 0,
+    cacheMisses: 0
   };
+
+  const CACHE_KEY = 'livroFiscal_cache_v1';
 
   const el = {
     chooseBtn: document.getElementById('chooseBtn'),
     clearBtn: document.getElementById('clearBtn'),
+    clearCacheBtn: document.getElementById('clearCacheBtn'),
     exportBtn: document.getElementById('exportBtn'),
     folderInput: document.getElementById('folderInput'),
     emptyState: document.getElementById('emptyState'),
@@ -429,6 +436,7 @@
     foldCount: document.getElementById('foldCount'),
     foldValor: document.getElementById('foldValor'),
     skippedNote: document.getElementById('skippedNote'),
+    cacheNote: document.getElementById('cacheNote'),
     theadRow: document.querySelector('thead tr')
   };
 
@@ -452,6 +460,32 @@
   function groupChave(chave) {
     if (!chave) return '—';
     return chave.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function fileKey(file) {
+    return file.name + '|' + file.size + '|' + file.lastModified;
+  }
+
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveCache(cache) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      return true;
+    } catch (e) {
+      return false; // provavelmente estourou a cota do localStorage
+    }
+  }
+
+  function clearCache() {
+    try { localStorage.removeItem(CACHE_KEY); } catch (e) { /* ignora */ }
   }
 
   function getFirstText(xmlDoc, tag) {
@@ -520,25 +554,49 @@
       pdfIndex[base] = f;
     });
 
+    const cache = loadCache();
+    let cacheHits = 0;
+    let cacheMisses = 0;
+
     state.notas = [];
     state.ignorados = 0;
 
     let folio = 1;
     for (const file of xmlFiles) {
-      try {
-        const text = await file.text();
-        const parsed = parseNFe(file.name, text);
-        if (parsed.skip) {
-          state.ignorados++;
-          continue;
+      const key = fileKey(file);
+      const cached = cache[key];
+
+      let parsed;
+      if (cached) {
+        cacheHits++;
+        parsed = cached.skip ? { skip: true } : { skip: false, ...cached.data };
+      } else {
+        cacheMisses++;
+        try {
+          const text = await file.text();
+          parsed = parseNFe(file.name, text);
+        } catch (e) {
+          parsed = { skip: true };
         }
-        const baseXml = file.name.replace(/\.xml$/i, '');
-        const pdfFile = pdfIndex[baseXml] || (parsed.chave ? pdfIndex[parsed.chave] : null) || null;
-        state.notas.push({ folio: folio++, ...parsed, pdfFile });
-      } catch (e) {
-        state.ignorados++;
+        // grava no cache (sem o File do pdf, que não é serializável)
+        cache[key] = parsed.skip
+          ? { skip: true }
+          : { skip: false, data: (({ skip, ...rest }) => rest)(parsed) };
       }
+
+      if (parsed.skip) {
+        state.ignorados++;
+        continue;
+      }
+
+      const baseXml = file.name.replace(/\.xml$/i, '');
+      const pdfFile = pdfIndex[baseXml] || (parsed.chave ? pdfIndex[parsed.chave] : null) || null;
+      state.notas.push({ folio: folio++, ...parsed, pdfFile });
     }
+
+    saveCache(cache);
+    state.cacheHits = cacheHits;
+    state.cacheMisses = cacheMisses;
 
     render();
   }
@@ -636,6 +694,12 @@
       ? state.ignorados + ' arquivo(s) ignorado(s) (eventos, XML inválidos ou fora do padrão NF-e)'
       : '';
 
+    if (hasData && (state.cacheHits || state.cacheMisses)) {
+      el.cacheNote.textContent = state.cacheHits + ' do cache · ' + state.cacheMisses + ' processado(s) agora';
+    } else {
+      el.cacheNote.textContent = '';
+    }
+
     const rows = applyFilterSort();
 
     el.tableBody.innerHTML = rows.map(n => `
@@ -704,6 +768,18 @@
     el.folderInput.value = '';
     el.chooseBtn.textContent = 'Selecionar pasta';
     render();
+  });
+
+  el.clearCacheBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Isso vai apagar o cache local do navegador. Na próxima vez que você selecionar a pasta, ' +
+      'TODOS os XML serão reprocessados do zero (mais lento). Confirma?'
+    );
+    if (!ok) return;
+    clearCache();
+    state.cacheHits = 0;
+    state.cacheMisses = 0;
+    window.alert('Cache limpo. Selecione a pasta novamente para reprocessar tudo.');
   });
 
   el.exportBtn.addEventListener('click', exportCSV);
