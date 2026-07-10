@@ -82,6 +82,14 @@
 
   h1 em { font-style: italic; color: var(--text-dim); font-weight: 400; }
 
+  .folder-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin: 8px 0 0;
+  }
+  .folder-label strong { color: var(--accent); font-weight: 500; }
+
   .header-actions { display: flex; gap: 10px; align-items: center; }
 
   button {
@@ -314,12 +322,14 @@
     <div>
       <p class="brand-eyebrow">Sol Colchões &amp; Estofados</p>
       <h1>Livro <em>Fiscal</em></h1>
+      <p class="folder-label" id="folderLabel"></p>
     </div>
     <div class="header-actions">
       <input type="file" id="folderInput" webkitdirectory directory multiple>
       <button class="btn-ghost" id="clearBtn" style="display:none;">Limpar</button>
       <button class="btn-ghost" id="clearCacheBtn">Limpar cache</button>
       <button class="btn-ghost" id="exportBtn" style="display:none;">Exportar CSV</button>
+      <button class="btn-ghost" id="refreshBtn" style="display:none;">Atualizar</button>
       <button class="btn-primary" id="chooseBtn">Selecionar pasta</button>
     </div>
   </header>
@@ -411,16 +421,23 @@
     sortDir: 'asc',
     query: '',
     cacheHits: 0,
-    cacheMisses: 0
+    cacheMisses: 0,
+    dirHandle: null
   };
 
   const CACHE_KEY = 'livroFiscal_cache_v1';
+  const DB_NAME = 'livroFiscalDB';
+  const DB_STORE = 'handles';
+  const DB_KEY = 'pastaSalva';
+  const supportsFSA = 'showDirectoryPicker' in window;
 
   const el = {
     chooseBtn: document.getElementById('chooseBtn'),
     clearBtn: document.getElementById('clearBtn'),
     clearCacheBtn: document.getElementById('clearCacheBtn'),
     exportBtn: document.getElementById('exportBtn'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    folderLabel: document.getElementById('folderLabel'),
     folderInput: document.getElementById('folderInput'),
     emptyState: document.getElementById('emptyState'),
     tableWrap: document.getElementById('tableWrap'),
@@ -464,6 +481,61 @@
 
   function fileKey(file) {
     return file.name + '|' + file.size + '|' + file.lastModified;
+  }
+
+  function openHandleDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveDirHandle(handle) {
+    try {
+      const db = await openHandleDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(handle, DB_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) { /* navegador sem suporte a guardar handle, segue sem persistência */ }
+  }
+
+  async function loadDirHandle() {
+    try {
+      const db = await openHandleDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const req = tx.objectStore(DB_STORE).get(DB_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function collectFilesFromHandle(dirHandle, out) {
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'file') {
+        try {
+          const file = await entry.getFile();
+          out.push(file);
+        } catch (e) { /* arquivo sumiu/sem acesso, ignora */ }
+      } else if (entry.kind === 'directory') {
+        await collectFilesFromHandle(entry, out);
+      }
+    }
+  }
+
+  async function ensurePermission(handle) {
+    const opts = { mode: 'read' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+    return false;
   }
 
   function loadCache() {
@@ -751,7 +823,50 @@
     URL.revokeObjectURL(url);
   }
 
-  el.chooseBtn.addEventListener('click', () => el.folderInput.click());
+  el.chooseBtn.addEventListener('click', async () => {
+    if (supportsFSA) {
+      try {
+        const handle = await window.showDirectoryPicker();
+        state.dirHandle = handle;
+        await saveDirHandle(handle);
+        el.folderLabel.innerHTML = 'Pasta salva: <strong>' + escapeHtml(handle.name) + '</strong>';
+        el.chooseBtn.textContent = 'Processando…';
+        el.chooseBtn.disabled = true;
+        const files = [];
+        await collectFilesFromHandle(handle, files);
+        await handleFiles(files);
+        el.chooseBtn.textContent = 'Trocar pasta';
+        el.chooseBtn.disabled = false;
+        el.refreshBtn.style.display = 'inline-block';
+      } catch (e) {
+        // usuário cancelou o seletor, ou erro de permissão - não faz nada
+        el.chooseBtn.disabled = false;
+      }
+    } else {
+      el.folderInput.click();
+    }
+  });
+
+  el.refreshBtn.addEventListener('click', async () => {
+    let handle = state.dirHandle || await loadDirHandle();
+    if (!handle) {
+      window.alert('Nenhuma pasta salva ainda. Clique em "Selecionar pasta" primeiro.');
+      return;
+    }
+    const ok = await ensurePermission(handle);
+    if (!ok) {
+      window.alert('Permissão de acesso à pasta não foi concedida.');
+      return;
+    }
+    state.dirHandle = handle;
+    el.refreshBtn.textContent = 'Atualizando…';
+    el.refreshBtn.disabled = true;
+    const files = [];
+    await collectFilesFromHandle(handle, files);
+    await handleFiles(files);
+    el.refreshBtn.textContent = 'Atualizar';
+    el.refreshBtn.disabled = false;
+  });
 
   el.folderInput.addEventListener('change', (e) => {
     if (e.target.files && e.target.files.length) {
@@ -760,9 +875,22 @@
       handleFiles(e.target.files).then(() => {
         el.chooseBtn.textContent = 'Trocar pasta';
         el.chooseBtn.disabled = false;
+        el.refreshBtn.style.display = 'inline-block';
       });
     }
   });
+
+  // ao carregar a página, tenta recuperar uma pasta salva de uma sessão anterior
+  (async function tryRestoreSavedFolder() {
+    if (!supportsFSA) return;
+    const handle = await loadDirHandle();
+    if (handle) {
+      state.dirHandle = handle;
+      el.folderLabel.innerHTML = 'Pasta salva: <strong>' + escapeHtml(handle.name) + '</strong> · clique em Atualizar';
+      el.chooseBtn.textContent = 'Trocar pasta';
+      el.refreshBtn.style.display = 'inline-block';
+    }
+  })();
 
   el.clearBtn.addEventListener('click', () => {
     state.notas = [];
