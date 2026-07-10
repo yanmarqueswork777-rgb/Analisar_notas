@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Livro Fiscal · Leitor de NF-e</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0b0d0d;
+    --surface: #14181a;
+    --surface-alt: #191e1f;
+    --line: #262f31;
+    --line-soft: #1d2426;
+    --text: #eae6da;
+    --text-dim: #8b9491;
+    --text-faint: #5c6462;
+    --accent: #c9a24b;
+    --accent-soft: rgba(201, 162, 75, 0.14);
+    --accent-soft-2: rgba(201, 162, 75, 0.28);
+    --good: #5c9c6f;
+    --danger: #b5544a;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-image: linear-gradient(var(--line-soft) 1px, transparent 1px);
+    background-size: 100% 42px;
+    background-position: 0 168px;
+    min-height: 100vh;
+  }
+
+  ::selection { background: var(--accent-soft-2); color: var(--text); }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 80px;
+  }
+
+  header {
+    padding: 48px 0 28px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .brand-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    font-size: 34px;
+    margin: 0;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+
+  h1 em { font-style: italic; color: var(--text-dim); font-weight: 400; }
+
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  button {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #17140a;
+    border: 1px solid var(--accent);
+    padding: 11px 20px;
+  }
+  .btn-primary:hover { background: #d9b25e; }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    padding: 11px 16px;
+  }
+  .btn-ghost:hover { border-color: var(--accent-soft-2); color: var(--text); }
+
+  #folderInput { display: none; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+
+  .stat { background: var(--surface); padding: 16px 18px; }
+
+  .stat .label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 8px;
+  }
+
+  .stat .value {
+    font-family: 'Source Serif 4', serif;
+    font-size: 22px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .stat .value.accent { color: var(--accent); }
+  .stat .value.danger { color: var(--danger); }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .search-box { position: relative; flex: 1; min-width: 240px; }
+
+  .search-box input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    padding: 12px 14px 12px 38px;
+    border-radius: var(--radius);
+    outline: none;
+  }
+  .search-box input:focus { border-color: var(--accent-soft-2); }
+  .search-box input::placeholder { color: var(--text-faint); }
+
+  .search-box svg {
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 15px;
+    height: 15px;
+    stroke: var(--text-faint);
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    outline: none;
+  }
+
+  .empty-state {
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 70px 30px;
+    text-align: center;
+    color: var(--text-faint);
+  }
+  .empty-state .glyph {
+    font-family: 'Source Serif 4', serif;
+    font-size: 40px;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+  }
+  .empty-state p { margin: 4px 0; font-size: 13.5px; }
+  .empty-state .hint { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--text-faint); margin-top: 14px; }
+
+  .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .table-scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; min-width: 920px; }
+
+  thead th {
+    background: var(--surface-alt);
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th .arrow { opacity: 0.5; margin-left: 4px; }
+
+  tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  tbody tr { background: var(--surface); }
+  tbody tr:hover { background: var(--surface-alt); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .col-folio { font-family: 'Source Serif 4', serif; font-style: italic; color: var(--text-faint); font-size: 13px; width: 44px; }
+
+  .col-chave {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    position: relative;
+  }
+  .col-chave:hover { color: var(--accent); }
+  .col-chave .copied-flag {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 10.5px;
+    color: var(--good);
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .col-chave.just-copied .copied-flag { opacity: 1; }
+
+  .col-doc { font-family: 'IBM Plex Mono', monospace; color: var(--text-dim); font-size: 12.5px; }
+  .col-data { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--text); white-space: nowrap; }
+  .col-cnpj { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .col-nome { color: var(--text); max-width: 320px; }
+  .col-valor { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--accent); text-align: right; white-space: nowrap; }
+
+  tfoot td {
+    padding: 14px 16px;
+    background: var(--surface-alt);
+    border-top: 1px solid var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  tfoot .total-valor { text-align: right; color: var(--accent); font-weight: 600; }
+
+  .foot-note {
+    margin-top: 16px;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    header { padding-top: 32px; }
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Sol Colchões &amp; Estofados</p>
+      <h1>Livro <em>Fiscal</em></h1>
+    </div>
+    <div class="header-actions">
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+      <button class="btn-ghost" id="clearBtn" style="display:none;">Limpar</button>
+      <button class="btn-ghost" id="exportBtn" style="display:none;">Exportar CSV</button>
+      <button class="btn-primary" id="chooseBtn">Selecionar pasta</button>
+    </div>
+  </header>
+
+  <div class="stats" id="statsRow" style="display:none;">
+    <div class="stat">
+      <p class="label">Notas lidas</p>
+      <p class="value" id="statTotal">0</p>
+    </div>
+    <div class="stat">
+      <p class="label">Valor total</p>
+      <p class="value accent" id="statValor">R$ 0,00</p>
+    </div>
+    <div class="stat">
+      <p class="label">Emitentes distintos</p>
+      <p class="value" id="statEmitentes">0</p>
+    </div>
+    <div class="stat">
+      <p class="label">Ignorados / erro</p>
+      <p class="value danger" id="statIgnorados">0</p>
+    </div>
+  </div>
+
+  <div class="controls" id="controlsRow" style="display:none;">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Buscar por chave, número, CNPJ ou emitente…">
+    </div>
+    <select id="sortSelect">
+      <option value="folio-asc">Ordem de leitura</option>
+      <option value="data-desc">Emissão · mais recente</option>
+      <option value="data-asc">Emissão · mais antiga</option>
+      <option value="nome-asc">Emitente · A–Z</option>
+      <option value="valor-desc">Valor · maior</option>
+      <option value="valor-asc">Valor · menor</option>
+    </select>
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    <div class="glyph">§</div>
+    <p><strong>Nenhuma pasta selecionada.</strong></p>
+    <p>Escolha o diretório com os XML de NF-e para montar o livro.</p>
+    <p class="hint">Processamento 100% local no navegador — nada é enviado a servidor algum.</p>
+  </div>
+
+  <div class="table-wrap" id="tableWrap" style="display:none;">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="folio">Fl.</th>
+            <th data-sort="chave">Chave de acesso</th>
+            <th data-sort="cNF">Nº doc. (cNF)</th>
+            <th data-sort="data">Data emissão</th>
+            <th data-sort="cnpj">CNPJ emitente</th>
+            <th data-sort="nome">Nome do emitente</th>
+            <th data-sort="valor">Valor</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">Exibindo <span id="foldCount">0</span> lançamento(s)</td>
+            <td class="total-valor" id="foldValor">R$ 0,00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <p class="foot-note">
+    <span id="skippedNote"></span>
+    <span>Livro Fiscal · leitor local de NF-e</span>
+  </p>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const state = {
+    notas: [],
+    ignorados: 0,
+    sortKey: 'folio',
+    sortDir: 'asc',
+    query: ''
+  };
+
+  const el = {
+    chooseBtn: document.getElementById('chooseBtn'),
+    clearBtn: document.getElementById('clearBtn'),
+    exportBtn: document.getElementById('exportBtn'),
+    folderInput: document.getElementById('folderInput'),
+    emptyState: document.getElementById('emptyState'),
+    tableWrap: document.getElementById('tableWrap'),
+    tableBody: document.getElementById('tableBody'),
+    statsRow: document.getElementById('statsRow'),
+    controlsRow: document.getElementById('controlsRow'),
+    statTotal: document.getElementById('statTotal'),
+    statValor: document.getElementById('statValor'),
+    statEmitentes: document.getElementById('statEmitentes'),
+    statIgnorados: document.getElementById('statIgnorados'),
+    searchInput: document.getElementById('searchInput'),
+    sortSelect: document.getElementById('sortSelect'),
+    foldCount: document.getElementById('foldCount'),
+    foldValor: document.getElementById('foldValor'),
+    skippedNote: document.getElementById('skippedNote'),
+    theadRow: document.querySelector('thead tr')
+  };
+
+  const currencyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  function cnpjMask(digits) {
+    if (!digits || digits.length !== 14) return digits || '—';
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function groupChave(chave) {
+    if (!chave) return '—';
+    return chave.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function getFirstText(xmlDoc, tag) {
+    const nodes = xmlDoc.getElementsByTagNameNS('*', tag);
+    return nodes.length ? (nodes[0].textContent || '').trim() : null;
+  }
+
+  function isEvento(fileName, xmlDoc) {
+    if (/_evento/i.test(fileName)) return true;
+    const eventoNodes = xmlDoc.getElementsByTagNameNS('*', 'procEventoNFe');
+    if (eventoNodes.length) return true;
+    const root = xmlDoc.documentElement;
+    if (root && /evento/i.test(root.tagName)) return true;
+    return false;
+  }
+
+  function parseNFe(fileName, text) {
+    let xmlDoc;
+    try {
+      xmlDoc = new DOMParser().parseFromString(text, 'application/xml');
+      if (xmlDoc.getElementsByTagName('parsererror').length) return { skip: true };
+    } catch (e) {
+      return { skip: true };
+    }
+
+    if (isEvento(fileName, xmlDoc)) return { skip: true };
+
+    let chave = null;
+    const infNFeNodes = xmlDoc.getElementsByTagNameNS('*', 'infNFe');
+    if (infNFeNodes.length) {
+      const id = infNFeNodes[0].getAttribute('Id') || '';
+      chave = id.replace(/^NFe/i, '');
+    }
+    if (!chave) {
+      chave = getFirstText(xmlDoc, 'chNFe');
+    }
+
+    const cNF = getFirstText(xmlDoc, 'cNF');
+    const dhEmi = getFirstText(xmlDoc, 'dhEmi');
+    const cnpj = getFirstText(xmlDoc, 'CNPJ');
+    const nome = getFirstText(xmlDoc, 'xNome');
+    const vNF = getFirstText(xmlDoc, 'vNF');
+
+    if (!chave && !cNF && !dhEmi && !cnpj && !nome) return { skip: true };
+
+    return {
+      skip: false,
+      chave: chave || '',
+      cNF: cNF || '',
+      dataEmissaoISO: dhEmi || null,
+      cnpj: cnpj || '',
+      nome: nome || '—',
+      valor: vNF ? parseFloat(vNF) : 0
+    };
+  }
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter(f => f.name.toLowerCase().endsWith('.xml'));
+    state.notas = [];
+    state.ignorados = 0;
+
+    let folio = 1;
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const parsed = parseNFe(file.name, text);
+        if (parsed.skip) {
+          state.ignorados++;
+          continue;
+        }
+        state.notas.push({ folio: folio++, ...parsed });
+      } catch (e) {
+        state.ignorados++;
+      }
+    }
+
+    render();
+  }
+
+  function applyFilterSort() {
+    const q = state.query.trim().toLowerCase();
+    let rows = state.notas;
+
+    if (q) {
+      rows = rows.filter(n =>
+        n.chave.toLowerCase().includes(q) ||
+        n.cNF.toLowerCase().includes(q) ||
+        n.cnpj.toLowerCase().includes(q) ||
+        n.nome.toLowerCase().includes(q)
+      );
+    }
+
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    const key = state.sortKey;
+    rows = [...rows].sort((a, b) => {
+      let va, vb;
+      switch (key) {
+        case 'data':
+          va = a.dataEmissaoISO ? new Date(a.dataEmissaoISO).getTime() : 0;
+          vb = b.dataEmissaoISO ? new Date(b.dataEmissaoISO).getTime() : 0;
+          break;
+        case 'valor':
+          va = a.valor; vb = b.valor; break;
+        case 'nome':
+          va = a.nome.toLowerCase(); vb = b.nome.toLowerCase(); break;
+        case 'cnpj':
+          va = a.cnpj; vb = b.cnpj; break;
+        case 'chave':
+          va = a.chave; vb = b.chave; break;
+        case 'cNF':
+          va = a.cNF; vb = b.cNF; break;
+        default:
+          va = a.folio; vb = b.folio;
+      }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+
+    return rows;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function updateSortArrows() {
+    el.theadRow.querySelectorAll('th').forEach(th => {
+      const key = th.dataset.sort;
+      const existing = th.querySelector('.arrow');
+      if (existing) existing.remove();
+      if (key === state.sortKey) {
+        const span = document.createElement('span');
+        span.className = 'arrow';
+        span.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+        th.appendChild(span);
+      }
+    });
+  }
+
+  function render() {
+    const hasData = state.notas.length > 0;
+
+    el.statsRow.style.display = (hasData || state.ignorados > 0) ? 'grid' : 'none';
+    el.controlsRow.style.display = hasData ? 'flex' : 'none';
+    el.tableWrap.style.display = hasData ? 'block' : 'none';
+    el.clearBtn.style.display = (hasData || state.ignorados > 0) ? 'inline-block' : 'none';
+    el.exportBtn.style.display = hasData ? 'inline-block' : 'none';
+
+    if (!hasData) {
+      el.emptyState.style.display = 'block';
+      el.emptyState.querySelector('p strong').textContent = state.ignorados > 0
+        ? 'Nenhuma NF-e válida encontrada.'
+        : 'Nenhuma pasta selecionada.';
+    } else {
+      el.emptyState.style.display = 'none';
+    }
+
+    const totalValor = state.notas.reduce((s, n) => s + (n.valor || 0), 0);
+    const emitentesUnicos = new Set(state.notas.map(n => n.cnpj)).size;
+
+    el.statTotal.textContent = state.notas.length;
+    el.statValor.textContent = currencyFmt.format(totalValor);
+    el.statEmitentes.textContent = emitentesUnicos;
+    el.statIgnorados.textContent = state.ignorados;
+
+    el.skippedNote.textContent = state.ignorados > 0
+      ? state.ignorados + ' arquivo(s) ignorado(s) (eventos, XML inválidos ou fora do padrão NF-e)'
+      : '';
+
+    const rows = applyFilterSort();
+
+    el.tableBody.innerHTML = rows.map(n => `
+      <tr>
+        <td class="col-folio">${String(n.folio).padStart(3, '0')}</td>
+        <td class="col-chave" data-chave="${n.chave}" title="Clique para copiar">
+          ${groupChave(n.chave)}<span class="copied-flag">copiado ✓</span>
+        </td>
+        <td class="col-doc">${n.cNF || '—'}</td>
+        <td class="col-data">${formatDate(n.dataEmissaoISO)}</td>
+        <td class="col-cnpj">${cnpjMask(n.cnpj)}</td>
+        <td class="col-nome">${escapeHtml(n.nome)}</td>
+        <td class="col-valor">${n.valor ? currencyFmt.format(n.valor) : '—'}</td>
+      </tr>
+    `).join('');
+
+    const filteredValor = rows.reduce((s, n) => s + (n.valor || 0), 0);
+    el.foldCount.textContent = rows.length;
+    el.foldValor.textContent = currencyFmt.format(filteredValor);
+
+    updateSortArrows();
+  }
+
+  function exportCSV() {
+    const rows = applyFilterSort();
+    const header = ['Chave de acesso', 'Numero cNF', 'Data emissao', 'CNPJ emitente', 'Nome emitente', 'Valor'];
+    const lines = [header.join(';')];
+    rows.forEach(n => {
+      lines.push([
+        n.chave,
+        n.cNF,
+        n.dataEmissaoISO ? formatDate(n.dataEmissaoISO) : '',
+        n.cnpj,
+        '"' + (n.nome || '').replace(/"/g, '""') + '"',
+        n.valor ? n.valor.toFixed(2).replace('.', ',') : ''
+      ].join(';'));
+    });
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'livro_fiscal.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  el.chooseBtn.addEventListener('click', () => el.folderInput.click());
+
+  el.folderInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length) {
+      el.chooseBtn.textContent = 'Processando…';
+      el.chooseBtn.disabled = true;
+      handleFiles(e.target.files).then(() => {
+        el.chooseBtn.textContent = 'Trocar pasta';
+        el.chooseBtn.disabled = false;
+      });
+    }
+  });
+
+  el.clearBtn.addEventListener('click', () => {
+    state.notas = [];
+    state.ignorados = 0;
+    state.query = '';
+    el.searchInput.value = '';
+    el.folderInput.value = '';
+    el.chooseBtn.textContent = 'Selecionar pasta';
+    render();
+  });
+
+  el.exportBtn.addEventListener('click', exportCSV);
+
+  el.searchInput.addEventListener('input', (e) => {
+    state.query = e.target.value;
+    render();
+  });
+
+  el.sortSelect.addEventListener('change', (e) => {
+    const [key, dir] = e.target.value.split('-');
+    state.sortKey = key;
+    state.sortDir = dir;
+    render();
+  });
+
+  el.theadRow.addEventListener('click', (e) => {
+    const th = e.target.closest('th');
+    if (!th) return;
+    const key = th.dataset.sort;
+    if (state.sortKey === key) {
+      state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.sortKey = key;
+      state.sortDir = 'asc';
+    }
+    render();
+  });
+
+  el.tableBody.addEventListener('click', (e) => {
+    const cell = e.target.closest('.col-chave');
+    if (!cell) return;
+    const chave = cell.dataset.chave;
+    if (!chave) return;
+    navigator.clipboard.writeText(chave).then(() => {
+      cell.classList.add('just-copied');
+      setTimeout(() => cell.classList.remove('just-copied'), 1200);
+    });
+  });
+
+  render();
+
+})();
+</script>
+</body>
+</html>
